@@ -36,3 +36,64 @@ Calculates the WKT representation of a local grid from 2 or more coordinates kno
 ## No longer in development due to funded OpenLog development by Oslandia
 
 * Released under GPL license.
+
+---
+
+## Standalone Desurvey Tool for VSCode
+
+A standalone Python-based drill hole desurvey tool that works independently without QGIS. Provides GUI interface for field matching, 3D shapefile export, and comprehensive QC reporting.
+
+### Features
+
+- **Minimum Curvature Desurvey**: Industry-standard quaternion-based calculations
+- **GUI Interface**: User-friendly tkinter interface with field mapping
+- **3D Shapefiles**: Export collar points, drill traces, intervals, and interval mid-points
+- **QC Reports**: Comprehensive HTML quality control reports with interactive 3D visualization
+- **Flexible Input**: Supports CSV files with auto-detection of column names
+- **Coordinate Systems**: Configurable EPSG coordinate reference systems
+
+### Limitations
+
+1. **Projected Coordinates Only**: The tool only works with projected coordinate systems (e.g., UTM, local grids). Latitude/longitude (WGS84, NAD83) coordinates are **not supported** and will produce incorrect results.
+
+2. **CSV Input Format**: Input files must be in CSV format. Other formats (Excel, shapefiles, databases) are not directly supported and must be converted to CSV first.
+
+3. **Column Name Matching**: While the tool auto-detects common column names, it may not recognize all variations. Users should verify field mappings in the GUI before processing.
+
+4. **Memory Constraints**: Very large datasets (hundreds of thousands of survey points or intervals) may cause performance issues or memory errors depending on available system RAM.
+
+5. **Desurvey Method**: Only the minimum curvature method is implemented. Other methods (tangential, balanced tangential, etc.) are not available.
+
+6. **Survey Validation**: The tool performs basic data quality checks but does not validate the geological or engineering validity of survey measurements.
+
+7. **3D Visualization**: The interactive 3D plot in QC reports requires an internet connection to load the Plotly JavaScript library from CDN.
+
+8. **Shapefile Limitations**: 
+   - Field names are truncated to 10 characters (ESRI Shapefile format limitation)
+   - Some special characters in field names may be removed or replaced
+   - Maximum file size constraints apply to individual shapefiles
+
+9. **Coordinate Precision**: Coordinates are calculated to millimeter precision but stored with 3 decimal places in shapefiles (meter-level precision).
+
+10. **No Real-time Preview**: Changes to parameters require re-running the entire desurvey process; there is no live preview of results.
+
+### Installation
+
+```bash
+# Create virtual environment
+python -m venv venv_desurvey
+
+# Activate (Windows)
+venv_desurvey\Scripts\activate
+
+# Install dependencies
+pip install -r requirements_standalone.txt
+```
+
+### Usage
+
+```bash
+# Launch GUI
+python desurvey_gui.py
+```
+

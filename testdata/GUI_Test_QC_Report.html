@@ -1,0 +1,410 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drill Hole Desurvey - QC Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .pass {
+            color: green;
+            font-weight: bold;
+        }
+        .warning {
+            color: orange;
+            font-weight: bold;
+        }
+        .fail {
+            color: red;
+            font-weight: bold;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background-color: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .error-box {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .range-table {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .range-item {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+        .timestamp {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 20px;
+            text-align: right;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-success { background-color: #4caf50; color: white; }
+        .badge-warning { background-color: #ff9800; color: white; }
+        .badge-error { background-color: #f44336; color: white; }
+        .badge-info { background-color: #2196f3; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Drill Hole Desurvey - Quality Control Report</h1>
+        <p class="timestamp">Generated: 2025-12-01 10:28:16</p>
+        
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Total Drill Holes</h3>
+                <div class="value">6</div>
+            </div>
+            <div class="summary-card">
+                <h3>Desurvey Points</h3>
+                <div class="value">606</div>
+            </div>
+            <div class="summary-card">
+                <h3>Avg Points/Hole</h3>
+                <div class="value">101.0</div>
+            </div>
+            <div class="summary-card">
+                <h3>Survey Records</h3>
+                <div class="value">6</div>
+            </div>
+        </div>
+        
+        <h2>📍 Collar Data Quality</h2>
+        <div class="section">
+            <table>
+                <tr>
+                    <th>Check</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td>Total Collar Records</td>
+                    <td>6</td>
+                    <td><span class="orange">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Duplicate Hole IDs</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Missing Coordinates (East/North/RL)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Missing End of Hole Depth</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Zero or Negative EOH</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+            </table>
+            
+            <h3>Coordinate Ranges</h3>
+            <div class="range-table">
+                <div class="range-item">
+                    <strong>East:</strong> 500000.00 to 500080.00
+                </div>
+                <div class="range-item">
+                    <strong>North:</strong> 2000000.00 to 2000000.00
+                </div>
+                <div class="range-item">
+                    <strong>RL:</strong> 3970.00 to 3980.00
+                </div>
+                <div class="range-item">
+                    <strong>EOH:</strong> 100.00 to 100.00
+                </div>
+            </div>
+        </div>
+
+        <h2>📐 Survey Data Quality</h2>
+        <div class="section">
+            <table>
+                <tr>
+                    <th>Check</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td>Total Survey Records</td>
+                    <td>6</td>
+                    <td><span class="pass">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Holes with Surveys</td>
+                    <td>3</td>
+                    <td><span class="pass">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Holes without Surveys</td>
+                    <td>3</td>
+                    <td><span class="red">⚠</span></td>
+                </tr>
+                <tr>
+                    <td>Invalid Depths (< 0)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Invalid Azimuth (< 0 or >= 360)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Invalid Dip (< -90 or > 90)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Surveys Beyond EOH</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Non-Monotonic Survey Depths</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>📊 Interval Data Quality</h2>
+        <div class="section">
+            <table>
+                <tr>
+                    <th>Check</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td>Total Intervals</td>
+                    <td>12</td>
+                    <td><span class="pass">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Holes with Intervals</td>
+                    <td>4</td>
+                    <td><span class="pass">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Invalid Depths (< 0)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Inverted Intervals (From > To)</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Zero Length Intervals</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Intervals Beyond EOH</td>
+                    <td>0</td>
+                    <td><span class="green">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Overlapping Intervals</td>
+                    <td>0</td>
+                    <td><span class="warning">✓</span></td>
+                </tr>
+                <tr>
+                    <td>Gaps in Intervals</td>
+                    <td>3</td>
+                    <td><span class="warning">⚠</span></td>
+                </tr>
+            </table>
+
+            <div class="info-box">
+                <strong>ℹ Holes with gaps in intervals:</strong><br>
+                DDH01, DDH91, DDHXX
+                
+            </div>
+        </div>
+
+        <h2>📏 End of Hole Depth Variance</h2>
+        <div class="section">
+            <p>Checking consistency between Collar EOH and maximum depths in Survey/Interval data (tolerance: ±0.1 m)</p>
+            <table>
+                <tr>
+                    <th>Check</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td>Holes with EOH Mismatches</td>
+                    <td>3</td>
+                    <td><span class="red">⚠</span></td>
+                </tr>
+            </table>
+
+            <h3>Detailed Variance Report</h3>
+            <table>
+                <tr>
+                    <th>Hole ID</th>
+                    <th>Data Type</th>
+                    <th>Collar EOH</th>
+                    <th>Max Depth</th>
+                    <th>Variance</th>
+                </tr>
+
+                <tr>
+                    <td>DDH01</td>
+                    <td><span class="badge badge-info">Survey</span></td>
+                    <td>100.00 m</td>
+                    <td>50.00 m</td>
+                    <td><span class="fail">50.00 m</span></td>
+                </tr>
+
+                <tr>
+                    <td>DDH01</td>
+                    <td><span class="badge badge-info">Interval</span></td>
+                    <td>100.00 m</td>
+                    <td>80.00 m</td>
+                    <td><span class="fail">20.00 m</span></td>
+                </tr>
+
+                <tr>
+                    <td>DDH91</td>
+                    <td><span class="badge badge-info">Survey</span></td>
+                    <td>100.00 m</td>
+                    <td>50.00 m</td>
+                    <td><span class="fail">50.00 m</span></td>
+                </tr>
+
+                <tr>
+                    <td>DDHXX</td>
+                    <td><span class="badge badge-info">Survey</span></td>
+                    <td>100.00 m</td>
+                    <td>50.00 m</td>
+                    <td><span class="fail">50.00 m</span></td>
+                </tr>
+
+            </table>
+            <div class="warning-box">
+                <strong>⚠ EOH Depth Variance Detected</strong><br>
+                The End of Hole depth in the collar file does not match the maximum depth in survey or interval data for some holes.
+                This may indicate incomplete data or data entry errors. Please verify these holes.
+            </div>
+        </div>
+
+        <h2>✅ Summary</h2>
+        <div class="section">
+
+            <div class="warning-box">
+                <strong>⚠ Issues Found:</strong><br>
+                <span class='badge badge-warning'>3 EOH depth mismatches</span>
+            </div>
+            <p>Please review the detailed checks above and correct any critical issues before using this data for analysis.</p>
+
+        </div>
+        
+        <div class="timestamp">
+            <p><em>This report was automatically generated by the Drill Hole Desurvey Tool.</em></p>
+        </div>
+    </div>
+</body>
+</html>
