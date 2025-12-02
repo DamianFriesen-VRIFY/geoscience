@@ -604,6 +604,7 @@ class DesurveyGUI:
                     
                     qc_output = Path(self.output_dir) / "QC_Report.html"
                     self.results_text.insert(tk.END, f"  Output path: {qc_output}\n")
+                    self.results_text.insert(tk.END, f"  Calling create_qc_report...\n")
                     self.root.update()
                     
                     qc_results = desurvey.create_qc_report(
@@ -615,7 +616,12 @@ class DesurveyGUI:
                         shapefile_paths=shapefile_paths
                     )
                     
-                    self.results_text.insert(tk.END, f"✓ Saved QC Report: {qc_output}\n")
+                    # Verify file was created
+                    if qc_output.exists():
+                        file_size = qc_output.stat().st_size
+                        self.results_text.insert(tk.END, f"✓ Saved QC Report: {qc_output} ({file_size:,} bytes)\n")
+                    else:
+                        self.results_text.insert(tk.END, f"⚠ Warning: QC Report file not found at {qc_output}\n")
                     
                     # Display quick summary
                     issues = 0

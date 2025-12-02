@@ -110,11 +110,21 @@ class DesurveyStandalone:
         Returns:
             List of desurvey points with (Depth, East, North, Elevation)
         """
+        import numpy as np
+        
         hole_id = collar['HoleID']
-        east = collar['East']
-        north = collar['North']
-        elev = collar['RL']
-        eoh = collar['EOH']
+        
+        # Validate and handle NaN values in collar data
+        try:
+            east = float(collar['East']) if pd.notna(collar['East']) else 0.0
+            north = float(collar['North']) if pd.notna(collar['North']) else 0.0
+            elev = float(collar['RL']) if pd.notna(collar['RL']) else 0.0
+            eoh = float(collar['EOH']) if pd.notna(collar['EOH']) else 0.0
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid collar data for hole {hole_id}: {str(e)}")
+        
+        if eoh <= 0:
+            raise ValueError(f"Invalid EOH ({eoh}) for hole {hole_id}")
         
         # Start from collar
         current_east = east
@@ -124,9 +134,13 @@ class DesurveyStandalone:
         
         # Initialize with collar azimuth and dip if no surveys
         if len(surveys) == 0:
-            collar_az = collar.get('Az', 0.0)
-            collar_dip = collar.get('Dip', -90.0 if self.down_dip_negative else 90.0)
-            surveys = [{'Depth': 0.0, 'Az': collar_az, 'Dip': collar_dip}]
+            # For holes without survey data, use collar Az/Dip if available, otherwise default to vertical
+            collar_az = collar.get('Az', 0.0)  # Default azimuth = 0 (North)
+            collar_dip = collar.get('Dip', -90.0)  # Default dip = -90° (vertical down)
+            surveys = [
+                {'Depth': 0.0, 'Az': collar_az, 'Dip': collar_dip},
+                {'Depth': eoh, 'Az': collar_az, 'Dip': collar_dip}
+            ]
         
         # Ensure first survey is at depth 0
         if surveys[0]['Depth'] > 0:
@@ -186,8 +200,12 @@ class DesurveyStandalone:
                 
                 # Calculate displacement
                 # Azimuth is measured clockwise from north
-                # Dip is measured from horizontal (negative is down if down_dip_negative)
-                if self.down_dip_negative:
+                # Dip is measured from horizontal
+                # If down_dip_negative is True, negative dips mean drilling down
+                # If down_dip_negative is False, positive dips mean drilling down
+                # Standard convention: positive dip = up, negative dip = down
+                # So if down_dip_negative is False, we need to negate to convert to standard
+                if not self.down_dip_negative:
                     dip_rad = -dip_rad
                 
                 # Calculate vector components
@@ -233,28 +251,57 @@ class DesurveyStandalone:
         
         all_points = []
         
+        # Validate collar data and skip holes with invalid data
+        valid_holes = 0
+        skipped_holes = []
+        
         for _, collar_row in collar_df.iterrows():
             hole_id = collar_row['HoleID']
+            
+            # Check for NaN values in required collar fields
+            if pd.isna(collar_row['East']) or pd.isna(collar_row['North']) or pd.isna(collar_row['RL']) or pd.isna(collar_row['EOH']):
+                skipped_holes.append(hole_id)
+                continue
+            
+            # Check for valid EOH
+            if collar_row['EOH'] <= 0:
+                skipped_holes.append(hole_id)
+                continue
             
             # Get surveys for this hole
             hole_surveys = survey_df[survey_df['HoleID'] == hole_id].copy()
             
-            # Convert to list of dictionaries
+            # Convert to list of dictionaries, skipping rows with NaN values
             surveys = []
             for _, survey_row in hole_surveys.iterrows():
-                surveys.append({
-                    'Depth': survey_row['Depth'],
-                    'Az': survey_row['Az'],
-                    'Dip': survey_row['Dip']
-                })
+                # Skip surveys with NaN values in critical fields
+                if pd.notna(survey_row['Depth']) and pd.notna(survey_row['Az']) and pd.notna(survey_row['Dip']):
+                    surveys.append({
+                        'Depth': float(survey_row['Depth']),
+                        'Az': float(survey_row['Az']),
+                        'Dip': float(survey_row['Dip'])
+                    })
             
             # Sort by depth
             surveys.sort(key=lambda x: x['Depth'])
             
             # Desurvey this hole
-            collar_dict = collar_row.to_dict()
-            points = self.desurvey_hole(collar_dict, surveys)
-            all_points.extend(points)
+            try:
+                collar_dict = collar_row.to_dict()
+                points = self.desurvey_hole(collar_dict, surveys)
+                all_points.extend(points)
+                valid_holes += 1
+            except Exception as e:
+                print(f"Warning: Could not desurvey hole {hole_id}: {str(e)}")
+                skipped_holes.append(hole_id)
+                continue
+        
+        if skipped_holes:
+            print(f"\nSkipped {len(skipped_holes)} holes due to invalid data: {', '.join(map(str, skipped_holes[:10]))}")
+            if len(skipped_holes) > 10:
+                print(f"... and {len(skipped_holes) - 10} more")
+        
+        print(f"Successfully desurveyed {valid_holes} holes")
         
         # Convert to DataFrame
         desurvey_df = pd.DataFrame(all_points)
@@ -967,12 +1014,25 @@ class DesurveyStandalone:
         qc_results['overall']['avg_points_per_hole'] = len(desurvey_df) / len(collar_df) if len(collar_df) > 0 else 0
         
         # Generate HTML report
-        html = self._generate_qc_html(qc_results, collar_df, desurvey_df, interval_df)
+        try:
+            html = self._generate_qc_html(qc_results, collar_df, desurvey_df, interval_df)
+        except Exception as e:
+            print(f"Error generating QC HTML: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Save HTML file
         output_path = Path(output_path)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html)
+        output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+        
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(html)
+            print(f"QC Report saved to: {output_path}")
+        except Exception as e:
+            print(f"Error writing QC report to {output_path}: {str(e)}")
+            raise
         
         return qc_results
     
@@ -993,11 +1053,14 @@ class DesurveyStandalone:
             
             fig = go.Figure()
             
-            # Add collar points
+            # Add collar points at surface (depth = 0)
+            # Calculate depth below surface for each collar
+            collar_depths = [0.0] * len(collar_df)  # Collars are at surface (depth 0)
+            
             fig.add_trace(go.Scatter3d(
                 x=collar_df['East'],
                 y=collar_df['North'],
-                z=collar_df['RL'],
+                z=collar_depths,
                 mode='markers',
                 name='Collars',
                 marker=dict(
@@ -1006,34 +1069,41 @@ class DesurveyStandalone:
                     symbol='diamond',
                     line=dict(color='darkred', width=1)
                 ),
-                text=[f"HoleID: {hid}<br>East: {e:.2f}<br>North: {n:.2f}<br>RL: {rl:.2f}<br>EOH: {eoh:.2f}" 
+                text=[f"HoleID: {hid}<br>East: {e:.2f}<br>North: {n:.2f}<br>RL: {rl:.2f}<br>Depth: 0.00m<br>EOH: {eoh:.2f}" 
                       for hid, e, n, rl, eoh in zip(collar_df['HoleID'], collar_df['East'], 
                                                       collar_df['North'], collar_df['RL'], collar_df['EOH'])],
                 hovertemplate='<b>%{text}</b><extra></extra>'
             ))
             
-            # Add drill traces
+            # Add drill traces (with visibility toggle)
+            # Convert elevation to depth below surface for each hole
             for hole_id in desurvey_df['HoleID'].unique():
                 hole_data = desurvey_df[desurvey_df['HoleID'] == hole_id].sort_values('Depth')
+                
+                # Get collar RL for this hole to calculate depth below surface
+                collar_rl = collar_df[collar_df['HoleID'] == hole_id]['RL'].iloc[0]
+                # Depth below surface = RL - Elevation
+                depths_below_surface = collar_rl - hole_data['Elevation']
                 
                 fig.add_trace(go.Scatter3d(
                     x=hole_data['East'],
                     y=hole_data['North'],
-                    z=hole_data['Elevation'],
+                    z=depths_below_surface,
                     mode='lines',
-                    name=f'Trace: {hole_id}',
+                    name='Drill Traces',
+                    legendgroup='traces',  # Group all traces together
                     line=dict(
                         color='blue',
                         width=3
                     ),
-                    showlegend=False,
+                    showlegend=(hole_id == desurvey_df['HoleID'].unique()[0]),  # Show legend only for first trace
                     text=[f"HoleID: {hole_id}<br>Depth: {d:.2f}m<br>East: {e:.2f}<br>North: {n:.2f}<br>Elev: {el:.2f}" 
                           for d, e, n, el in zip(hole_data['Depth'], hole_data['East'], 
                                                   hole_data['North'], hole_data['Elevation'])],
                     hovertemplate='<b>%{text}</b><extra></extra>'
                 ))
             
-            # Add interval mid-points if available
+            # Add interval mid-points if available (inverted Z-axis)
             if interval_df is not None and len(interval_df) > 0:
                 # Calculate mid-points for intervals
                 interval_points = []
@@ -1078,10 +1148,17 @@ class DesurveyStandalone:
                                 })
                     
                     if interval_points:
+                        # Convert interval elevations to depth below surface
+                        interval_depths = []
+                        for p in interval_points:
+                            collar_rl = collar_df[collar_df['HoleID'] == p['hole_id']]['RL'].iloc[0]
+                            depth_below_surface = collar_rl - p['z']
+                            interval_depths.append(depth_below_surface)
+                        
                         fig.add_trace(go.Scatter3d(
                             x=[p['x'] for p in interval_points],
                             y=[p['y'] for p in interval_points],
-                            z=[p['z'] for p in interval_points],
+                            z=interval_depths,
                             mode='markers',
                             name='Interval Mid-Points',
                             marker=dict(
@@ -1095,13 +1172,14 @@ class DesurveyStandalone:
                             hovertemplate='<b>%{text}</b><extra></extra>'
                         ))
             
-            # Update layout
+            # Update layout with depth axis (0 at top, positive values going down)
             fig.update_layout(
                 title='3D Drill Hole Visualization',
                 scene=dict(
                     xaxis_title='East (m)',
                     yaxis_title='North (m)',
-                    zaxis_title='Elevation (m)',
+                    zaxis_title='Depth Below Surface (m)',
+                    zaxis=dict(autorange='reversed'),  # Reverse so depth increases downward
                     aspectmode='data'
                 ),
                 height=700,
@@ -1111,7 +1189,39 @@ class DesurveyStandalone:
                     y=0.99,
                     xanchor="left",
                     x=0.01
-                )
+                ),
+                updatemenus=[
+                    dict(
+                        type="buttons",
+                        direction="left",
+                        buttons=[
+                            dict(
+                                args=[{"visible": [True] + [True] * len(desurvey_df['HoleID'].unique()) + 
+                                      ([True] if interval_df is not None and len(interval_df) > 0 else [])}],
+                                label="Show All",
+                                method="update"
+                            ),
+                            dict(
+                                args=[{"visible": [True] + [False] * len(desurvey_df['HoleID'].unique()) + 
+                                      ([True] if interval_df is not None and len(interval_df) > 0 else [])}],
+                                label="Hide Traces",
+                                method="update"
+                            ),
+                            dict(
+                                args=[{"visible": [True] + [True] * len(desurvey_df['HoleID'].unique()) + 
+                                      ([False] if interval_df is not None and len(interval_df) > 0 else [])}],
+                                label="Hide Intervals",
+                                method="update"
+                            )
+                        ],
+                        pad={"r": 10, "t": 10},
+                        showactive=True,
+                        x=0.11,
+                        xanchor="left",
+                        y=1.15,
+                        yanchor="top"
+                    )
+                ]
             )
             
             # Convert to HTML div
@@ -1124,17 +1234,26 @@ class DesurveyStandalone:
     def _generate_qc_html(self, qc_results, collar_df=None, desurvey_df=None, interval_df=None):
         """Generate HTML content for QC report"""
         
-        def status_icon(count, reverse=False):
-            """Return colored icon based on count (0 = good unless reverse)"""
-            if reverse:
-                return '✓' if count > 0 else '⚠'
-            return '✓' if count == 0 else '⚠'
+        def status_icon(count):
+            """Return status icon based on count (0 = pass)"""
+            if count == 0:
+                return '✓'
+            elif count > 0:
+                return '✗'
+            return '−'
         
-        def status_color(count, reverse=False):
-            """Return color based on count"""
-            if reverse:
-                return 'green' if count > 0 else 'orange'
-            return 'green' if count == 0 else 'red'
+        def status_class(count):
+            """Return CSS class based on count"""
+            if count == 0:
+                return 'status-pass'
+            elif count > 0:
+                return 'status-fail'
+            return 'status-info'
+        
+        # Generate Plotly chart first (before the main HTML template)
+        plotly_chart = ""
+        if collar_df is not None and desurvey_df is not None:
+            plotly_chart = self._generate_plotly_3d(collar_df, desurvey_df, interval_df)
         
         html = f"""
 <!DOCTYPE html>
@@ -1209,17 +1328,20 @@ class DesurveyStandalone:
         tr:hover {{
             background-color: #f5f5f5;
         }}
-        .pass {{
-            color: green;
+        .status-pass {{
+            color: #4caf50;
             font-weight: bold;
+            font-size: 18px;
         }}
-        .warning {{
-            color: orange;
+        .status-fail {{
+            color: #f44336;
             font-weight: bold;
+            font-size: 18px;
         }}
-        .fail {{
-            color: red;
+        .status-info {{
+            color: #757575;
             font-weight: bold;
+            font-size: 18px;
         }}
         .section {{
             margin: 30px 0;
@@ -1344,35 +1466,30 @@ class DesurveyStandalone:
         </div>
 """
         
-        # Add 3D Plotly visualization if data is available
-        if collar_df is not None and desurvey_df is not None:
+        # Add 3D Plotly visualization if it was generated
+        if plotly_chart:
             html += """
         <h2>🌍 3D Drill Hole Visualization</h2>
         <div class="section">
             <p>Interactive 3D view of drill hole locations, traces, and intervals. Click and drag to rotate, scroll to zoom.</p>
 """
-            plotly_chart = self._generate_plotly_3d(collar_df, desurvey_df, interval_df)
             html += plotly_chart
             html += """
         </div>
 """
         
-        # Add status legend prominently
+        # Add simple status legend at top
         html += """
-        <div class="legend" style="margin: 30px 0;">
-            <div class="legend-title" style="font-size: 16px; margin-bottom: 15px;">📊 Data Quality Status Legend</div>
-            <div class="legend-items" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="legend">
+            <div class="legend-title">Status Legend</div>
+            <div class="legend-items">
                 <div class="legend-item">
-                    <span class="legend-icon pass" style="font-size: 20px;">✓</span>
-                    <span><strong>Pass</strong> - No issues detected</span>
+                    <span class="status-pass">✓</span>
+                    <span>Pass</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-icon warning" style="font-size: 20px;">⚠</span>
-                    <span><strong>Warning</strong> - Minor issue, review recommended</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-icon fail" style="font-size: 20px;">✗</span>
-                    <span><strong>Fail</strong> - Critical issue, action required</span>
+                    <span class="status-fail">✗</span>
+                    <span>Fail</span>
                 </div>
             </div>
         </div>
@@ -1389,17 +1506,17 @@ class DesurveyStandalone:
                 <tr>
                     <td>Duplicate Hole IDs</td>
                     <td>{qc_results['collar']['duplicate_ids']}</td>
-                    <td><span class="{status_color(qc_results['collar']['duplicate_ids'])}">{status_icon(qc_results['collar']['duplicate_ids'])}</span></td>
+                    <td><span class="{status_class(qc_results['collar']['duplicate_ids'])}">{status_icon(qc_results['collar']['duplicate_ids'])}</span></td>
                 </tr>
                 <tr>
                     <td>Missing Coordinates</td>
                     <td>{qc_results['collar']['missing_coordinates']}</td>
-                    <td><span class="{status_color(qc_results['collar']['missing_coordinates'])}">{status_icon(qc_results['collar']['missing_coordinates'])}</span></td>
+                    <td><span class="{status_class(qc_results['collar']['missing_coordinates'])}">{status_icon(qc_results['collar']['missing_coordinates'])}</span></td>
                 </tr>
                 <tr>
                     <td>Invalid EOH Depths</td>
                     <td>{qc_results['collar']['missing_eoh'] + qc_results['collar']['zero_eoh']}</td>
-                    <td><span class="{status_color(qc_results['collar']['missing_eoh'] + qc_results['collar']['zero_eoh'])}">{status_icon(qc_results['collar']['missing_eoh'] + qc_results['collar']['zero_eoh'])}</span></td>
+                    <td><span class="{status_class(qc_results['collar']['missing_eoh'] + qc_results['collar']['zero_eoh'])}">{status_icon(qc_results['collar']['missing_eoh'] + qc_results['collar']['zero_eoh'])}</span></td>
                 </tr>
             </table>
             
@@ -1438,22 +1555,22 @@ class DesurveyStandalone:
                 <tr>
                     <td>Holes without Surveys</td>
                     <td>{qc_results['survey']['holes_without_surveys']}</td>
-                    <td><span class="{status_color(qc_results['survey']['holes_without_surveys'])}">{status_icon(qc_results['survey']['holes_without_surveys'])}</span></td>
+                    <td><span class="{status_class(qc_results['survey']['holes_without_surveys'])}">{status_icon(qc_results['survey']['holes_without_surveys'])}</span></td>
                 </tr>
                 <tr>
                     <td>Invalid Depths/Azimuth/Dip</td>
                     <td>{qc_results['survey']['invalid_depths'] + qc_results['survey']['invalid_azimuth'] + qc_results['survey']['invalid_dip']}</td>
-                    <td><span class="{status_color(qc_results['survey']['invalid_depths'] + qc_results['survey']['invalid_azimuth'] + qc_results['survey']['invalid_dip'])}">{status_icon(qc_results['survey']['invalid_depths'] + qc_results['survey']['invalid_azimuth'] + qc_results['survey']['invalid_dip'])}</span></td>
+                    <td><span class="{status_class(qc_results['survey']['invalid_depths'] + qc_results['survey']['invalid_azimuth'] + qc_results['survey']['invalid_dip'])}">{status_icon(qc_results['survey']['invalid_depths'] + qc_results['survey']['invalid_azimuth'] + qc_results['survey']['invalid_dip'])}</span></td>
                 </tr>
                 <tr>
                     <td>Surveys Beyond EOH</td>
                     <td>{qc_results['survey']['surveys_beyond_eoh']}</td>
-                    <td><span class="{status_color(qc_results['survey']['surveys_beyond_eoh'])}">{status_icon(qc_results['survey']['surveys_beyond_eoh'])}</span></td>
+                    <td><span class="{status_class(qc_results['survey']['surveys_beyond_eoh'])}">{status_icon(qc_results['survey']['surveys_beyond_eoh'])}</span></td>
                 </tr>
                 <tr>
                     <td>Non-Monotonic Depths</td>
                     <td>{qc_results['survey']['non_monotonic_depths']}</td>
-                    <td><span class="{status_color(qc_results['survey']['non_monotonic_depths'])}">{status_icon(qc_results['survey']['non_monotonic_depths'])}</span></td>
+                    <td><span class="{status_class(qc_results['survey']['non_monotonic_depths'])}">{status_icon(qc_results['survey']['non_monotonic_depths'])}</span></td>
                 </tr>
             </table>
 """
@@ -1501,22 +1618,22 @@ class DesurveyStandalone:
                 <tr>
                     <td>Invalid/Inverted Intervals</td>
                     <td>{qc_results['interval']['invalid_depths'] + qc_results['interval']['inverted_intervals']}</td>
-                    <td><span class="{status_color(qc_results['interval']['invalid_depths'] + qc_results['interval']['inverted_intervals'])}">{status_icon(qc_results['interval']['invalid_depths'] + qc_results['interval']['inverted_intervals'])}</span></td>
+                    <td><span class="{status_class(qc_results['interval']['invalid_depths'] + qc_results['interval']['inverted_intervals'])}">{status_icon(qc_results['interval']['invalid_depths'] + qc_results['interval']['inverted_intervals'])}</span></td>
                 </tr>
                 <tr>
                     <td>Intervals Beyond EOH</td>
                     <td>{qc_results['interval']['intervals_beyond_eoh']}</td>
-                    <td><span class="{status_color(qc_results['interval']['intervals_beyond_eoh'])}">{status_icon(qc_results['interval']['intervals_beyond_eoh'])}</span></td>
+                    <td><span class="{status_class(qc_results['interval']['intervals_beyond_eoh'])}">{status_icon(qc_results['interval']['intervals_beyond_eoh'])}</span></td>
                 </tr>
                 <tr>
                     <td>Overlapping Intervals</td>
                     <td>{qc_results['interval']['overlapping_intervals']}</td>
-                    <td><span class="warning">{status_icon(qc_results['interval']['overlapping_intervals'], reverse=False)}</span></td>
+                    <td><span class="{status_class(qc_results['interval']['overlapping_intervals'])}">{status_icon(qc_results['interval']['overlapping_intervals'])}</span></td>
                 </tr>
                 <tr>
                     <td>Gaps in Intervals</td>
                     <td>{qc_results['interval']['gaps_in_intervals']}</td>
-                    <td><span class="warning">{status_icon(qc_results['interval']['gaps_in_intervals'], reverse=False)}</span></td>
+                    <td><span class="{status_class(qc_results['interval']['gaps_in_intervals'])}">{status_icon(qc_results['interval']['gaps_in_intervals'])}</span></td>
                 </tr>
             </table>
 """
@@ -1556,24 +1673,6 @@ class DesurveyStandalone:
             <p>Checking consistency between Collar EOH and maximum depths in Survey/Interval data.</p>
             <p><em>Note: Only variances ≥{qc_results['eoh_variance']['reporting_threshold']} m are reported below.</em></p>
             
-            <div class="legend">
-                <div class="legend-title">Status Legend:</div>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <span class="legend-icon pass">✓</span>
-                        <span>Pass - No issues detected</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-icon warning">⚠</span>
-                        <span>Warning - Minor issue</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-icon fail">✗</span>
-                        <span>Fail - Critical issue</span>
-                    </div>
-                </div>
-            </div>
-            
             <table>
                 <tr>
                     <th>Check</th>
@@ -1583,17 +1682,17 @@ class DesurveyStandalone:
                 <tr>
                     <td>Holes with EOH Mismatches (any variance)</td>
                     <td>{qc_results['eoh_variance']['count']}</td>
-                    <td><span class="{status_color(qc_results['eoh_variance']['count'])}">{status_icon(qc_results['eoh_variance']['count'])}</span></td>
+                    <td><span class="{status_class(qc_results['eoh_variance']['count'])}">{status_icon(qc_results['eoh_variance']['count'])}</span></td>
                 </tr>
                 <tr>
                     <td>Survey Variances ≥{qc_results['eoh_variance']['reporting_threshold']} m</td>
                     <td>{len(qc_results['eoh_variance']['survey_variances'])}</td>
-                    <td><span class="{status_color(len(qc_results['eoh_variance']['survey_variances']))}">{status_icon(len(qc_results['eoh_variance']['survey_variances']))}</span></td>
+                    <td><span class="{status_class(len(qc_results['eoh_variance']['survey_variances']))}">{status_icon(len(qc_results['eoh_variance']['survey_variances']))}</span></td>
                 </tr>
                 <tr>
                     <td>Interval Variances ≥{qc_results['eoh_variance']['reporting_threshold']} m</td>
                     <td>{len(qc_results['eoh_variance']['interval_variances'])}</td>
-                    <td><span class="{status_color(len(qc_results['eoh_variance']['interval_variances']))}">{status_icon(len(qc_results['eoh_variance']['interval_variances']))}</span></td>
+                    <td><span class="{status_class(len(qc_results['eoh_variance']['interval_variances']))}">{status_icon(len(qc_results['eoh_variance']['interval_variances']))}</span></td>
                 </tr>
             </table>
 """
@@ -1613,13 +1712,12 @@ class DesurveyStandalone:
                     </tr>
 """
             for var in qc_results['eoh_variance']['survey_variances']:
-                variance_class = 'fail' if var['variance'] > 50.0 else 'warning'
                 html += f"""
                     <tr>
                         <td><strong>{var['hole_id']}</strong></td>
                         <td>{var['collar_eoh']:.2f} m</td>
                         <td>{var['max_depth']:.2f} m</td>
-                        <td><span class="{variance_class}">{var['variance']:.2f} m</span></td>
+                        <td>{var['variance']:.2f} m</td>
                     </tr>
 """
             html += """
@@ -1642,13 +1740,12 @@ class DesurveyStandalone:
                     </tr>
 """
             for var in qc_results['eoh_variance']['interval_variances']:
-                variance_class = 'fail' if var['variance'] > 50.0 else 'warning'
                 html += f"""
                     <tr>
                         <td><strong>{var['hole_id']}</strong></td>
                         <td>{var['collar_eoh']:.2f} m</td>
                         <td>{var['max_depth']:.2f} m</td>
-                        <td><span class="{variance_class}">{var['variance']:.2f} m</span></td>
+                        <td>{var['variance']:.2f} m</td>
                     </tr>
 """
             html += """
